@@ -93,16 +93,14 @@ int motorMinSpeed = 0;   // Minimum speed
 int motorMaxSpeed = 255; // Maximum speed
 
 // PID Constants and Variables for moving to target encoder value
-float kp = 2;
-float kd = 0.2;
-float ki = 0.008;
+float kp = 1;
+float kd = 0.1;
+float ki = 0;
 
 float prevErrorA = 0;
 float intErrorA = 0;
-long previousTimeA = 0;
 float prevErrorB = 0;
 float intErrorB = 0;
-long previousTimeB = 0;
 
 // Bot movement variables
 int leftTurnTarget = 4000;
@@ -201,8 +199,10 @@ void loop() {
   Serial.print(", ");
   Serial.println(best_y);
   Serial.println("Orienting bot");
+  delay(2000);
   orient_bot(best_x, best_y);
   Serial.println("Moving bot to next cell");
+  delay(1000);
   moveForward(cellDistance, cellDistance);
   bot_x = best_x;
   bot_y = best_y;
@@ -210,9 +210,16 @@ void loop() {
   Serial.print(bot_x);
   Serial.print(", ");
   Serial.println(bot_y);
-  Serial.println("Waiting for 10 seconds");
+  Serial.println("Waiting for 6 seconds");
 
-  delay(10000);
+  delay(6000);
+
+  // moveForward(cellDistance, cellDistance);
+  // delay(5000);
+  // turnLeft();
+  // delay(5000);
+  // turnRight();
+  // delay(5000);
 }
 
 // Interrupt handler for Encoder A (pins A and B)
@@ -252,6 +259,10 @@ void handleEncoderInterruptB() {
 void resetEncoders() {
   encoderCountA = 0;
   encoderCountB = 0;
+  prevErrorA = 0;
+  intErrorA = 0;
+  prevErrorB = 0;
+  intErrorB = 0;
 }
 
 // motor spin functions
@@ -281,47 +292,38 @@ void rightRev(int speed){
 
 // PID controller for moving motor to target encoder value
 float calculatePID(int motor, int currentEncoder, int targetEncoder) {
-  long currentTime = micros();
-  float deltaT;
   int e;
   float eDeriv;
   float u;
   
   float* prevError;
   float* intError;
-  long* previousTime;
   
   // Select appropriate constants and variables based on the motor
   if (motor == 0) { // Motor A
     prevError = &prevErrorA;
     intError = &intErrorA;
-    previousTime = &previousTimeA;
   } else if (motor == 1) { // Motor B
     prevError = &prevErrorB;
     intError = &intErrorB;
-    previousTime = &previousTimeB;
   } else {
     // Invalid motor, return zero control signal
     return 0;
   }
-
-  // Calculate delta time since the last update
-  deltaT = ((float)(currentTime - *previousTime)) / 1.0e6;
   
   // Error between target and current encoder value
   e = targetEncoder - currentEncoder;
   
   // Calculate error derivative
-  eDeriv = (e - *prevError) / deltaT;
+  eDeriv = (e - *prevError);
   
   // Update integral of the error
-  *intError += e * deltaT;
+  *intError += e;
   
   // PID control output
   u = (kp * e) + (kd * eDeriv) + (ki * (*intError));
   
   // Store current values for the next iteration
-  *previousTime = currentTime;
   *prevError = e;
   
   return u;
@@ -359,6 +361,7 @@ int moveMotorToTargetPosition(int motor, int target){
 }
 
 void moveForward(int targetA, int targetB) {
+  resetEncoders();
   while (abs(encoderCountA - targetA) > 100 || abs(encoderCountB - targetB) > 100) {
     moveMotorToTargetPosition(0, targetA);
     moveMotorToTargetPosition(1, targetB);
@@ -370,49 +373,48 @@ void moveForward(int targetA, int targetB) {
   // Stop both motors once the target is reached
   leftFwd(0);
   rightFwd(0);
-  resetEncoders();
 }
 
 void turnLeft() {
+  resetEncoders();
   while (abs(encoderCountA + leftTurnTarget) > 100 || abs(encoderCountB - leftTurnTarget) > 100) {
     moveMotorToTargetPosition(0, -leftTurnTarget);
     moveMotorToTargetPosition(1, leftTurnTarget);
-    // Serial.print("Encoder A ");
-    // Serial.print(encoderCountA);
-    // Serial.print(" Encoder B: ");
-    // Serial.println(encoderCountB);
+    Serial.print("Encoder A ");
+    Serial.print(encoderCountA);
+    Serial.print(" Encoder B: ");
+    Serial.println(encoderCountB);
   }
   leftFwd(0);
   rightFwd(0);
-  resetEncoders();
 }
 
 void turnRight() {
+  resetEncoders();
   while (abs(encoderCountA - rightTurnTarget) > 100 || abs(encoderCountB + rightTurnTarget) > 100) {
     moveMotorToTargetPosition(0, rightTurnTarget);
     moveMotorToTargetPosition(1, -rightTurnTarget);
-    // Serial.print("Encoder A ");
-    // Serial.print(encoderCountA);
-    // Serial.print(" Encoder B: ");
-    // Serial.println(encoderCountB);
+    Serial.print("Encoder A ");
+    Serial.print(encoderCountA);
+    Serial.print(" Encoder B: ");
+    Serial.println(encoderCountB);
   }
   leftFwd(0);
   rightFwd(0);
-  resetEncoders();
 }
 
 void one80() {
-  while (abs(encoderCountA + one80TurnTarget) > 100 || abs(encoderCountB + one80TurnTarget) > 100) {
-    moveMotorToTargetPosition(0, -one80TurnTarget);
+  resetEncoders();
+  while (abs(encoderCountA - one80TurnTarget) > 100 || abs(encoderCountB + one80TurnTarget) > 100) {
+    moveMotorToTargetPosition(0, one80TurnTarget);
     moveMotorToTargetPosition(1, -one80TurnTarget);
-    // Serial.print("Encoder A ");
-    // Serial.print(encoderCountA);
-    // Serial.print(" Encoder B: ");
-    // Serial.println(encoderCountB);
+    Serial.print("Encoder A ");
+    Serial.print(encoderCountA);
+    Serial.print(" Encoder B: ");
+    Serial.println(encoderCountB);
   }
   leftFwd(0);
   rightFwd(0);
-  resetEncoders();
 }
 
 void orient_bot(int target_x, int target_y){
