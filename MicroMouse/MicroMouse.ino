@@ -2,10 +2,10 @@
 #include <Ultrasonic.h>
 
 // pin definitions
-#define encoderPinA 2
-#define encoderPinB 3 
-#define encoderPinC 4
-#define encoderPinD 5 
+#define encoderPinA 2 // yellow
+#define encoderPinB 3 // green
+#define encoderPinC 4 // green
+#define encoderPinD 5 // yellow
 #define trigPin1 A4
 #define echoPin1 10
 #define trigPin2 A5
@@ -90,12 +90,18 @@ int IN2 = 7;  // IN4 for Motor 2
 
 // Motor control limits
 int motorMinSpeed = 0;   // Minimum speed
-int motorMaxSpeed = 255; // Maximum speed
+int motorMaxSpeed = 130; // Maximum speed
+float diffFactor = 1;
 
 // PID Constants and Variables for moving to target encoder value
 float kp = 1;
-float kd = 0.1;
+float kd = 2;
 float ki = 0;
+// PD constants
+float Kp_distance = 0.3;  // Proportional constant for distance
+float Kd_distance = 0.1;  // Derivative constant for distance
+float Kp_angle = 0.25;     // Proportional constant for angle
+float Kd_angle = 0.1;     // Derivative constant for angle
 
 float prevErrorA = 0;
 float intErrorA = 0;
@@ -103,10 +109,10 @@ float prevErrorB = 0;
 float intErrorB = 0;
 
 // Bot movement variables
-int leftTurnTarget = 4000;
-int rightTurnTarget = 4000;
+int leftTurnTarget = 2000;
+int rightTurnTarget = 1950;
 int one80TurnTarget = 4000;
-int cellDistance = 4000;
+int cellDistance = 1850;
 
 // function definitions
 // encoder functions
@@ -164,7 +170,7 @@ void setup() {
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
 
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println("Starting maze solver in 5 seconds");
   delay(5000);
 }
@@ -199,27 +205,24 @@ void loop() {
   Serial.print(", ");
   Serial.println(best_y);
   Serial.println("Orienting bot");
-  delay(2000);
   orient_bot(best_x, best_y);
+  delay(2000);
   Serial.println("Moving bot to next cell");
   delay(1000);
-  moveForward(cellDistance, cellDistance);
+  moveForward(cellDistance);
   bot_x = best_x;
   bot_y = best_y;
   Serial.print("Bot position: ");
   Serial.print(bot_x);
   Serial.print(", ");
   Serial.println(bot_y);
-  Serial.println("Waiting for 6 seconds");
+  Serial.println("Waiting for 3 seconds");
 
-  delay(6000);
-
-  // moveForward(cellDistance, cellDistance);
-  // delay(5000);
+  delay(2000);
   // turnLeft();
-  // delay(5000);
+  // delay(3000);
   // turnRight();
-  // delay(5000);
+  // delay(3000);
 }
 
 // Interrupt handler for Encoder A (pins A and B)
@@ -290,100 +293,86 @@ void rightRev(int speed){
   analogWrite(ENB, speed);
 }
 
-// PID controller for moving motor to target encoder value
-float calculatePID(int motor, int currentEncoder, int targetEncoder) {
-  int e;
-  float eDeriv;
-  float u;
+// PD control outputs
+float calculateDistancePD(int targetDistance, int currentDistance) {
+  static int prevDistanceError = 0;
+  int distanceError = targetDistance - currentDistance;
+  float distanceDeriv = distanceError - prevDistanceError;
   
-  float* prevError;
-  float* intError;
-  
-  // Select appropriate constants and variables based on the motor
-  if (motor == 0) { // Motor A
-    prevError = &prevErrorA;
-    intError = &intErrorA;
-  } else if (motor == 1) { // Motor B
-    prevError = &prevErrorB;
-    intError = &intErrorB;
-  } else {
-    // Invalid motor, return zero control signal
-    return 0;
-  }
-  
-  // Error between target and current encoder value
-  e = targetEncoder - currentEncoder;
-  
-  // Calculate error derivative
-  eDeriv = (e - *prevError);
-  
-  // Update integral of the error
-  *intError += e;
-  
-  // PID control output
-  u = (kp * e) + (kd * eDeriv) + (ki * (*intError));
-  
-  // Store current values for the next iteration
-  *prevError = e;
-  
-  return u;
+  // PD output for distance
+  float distanceOutput = (Kp_distance * distanceError) + (Kd_distance * distanceDeriv);
+  prevDistanceError = distanceError;
+
+  return distanceOutput;
 }
 
-int moveMotorToTargetPosition(int motor, int target){
-  float u;
-  int speed;
-  if (motor == 0) { // motor A
-    u = calculatePID(0, encoderCountA, target);
-    speed = fabs(u);
-    speed = constrain(speed, motorMinSpeed, motorMaxSpeed);
-    if (u < 0) {
-      leftRev(speed);  // Reverse if u is negative
-    } else if (u > 0) {
-      leftFwd(speed);  // Forward if u is positive
-    } else {
-      leftFwd(0);      // Stop
-    }
-    return speed;
-  } else if (motor == 1) { // motor B
-    u = calculatePID(1, encoderCountB, target);
-    speed = fabs(u);
-    speed = constrain(speed, motorMinSpeed, motorMaxSpeed);
-    if (u < 0) {
-      rightRev(speed); // Reverse if u is negative
-    } else if (u > 0) {
-      rightFwd(speed); // Forward if u is positive
-    } else {
-      rightFwd(0);     // Stop
-    }
-    return speed;
-  }
-  return 0;
+float calculateAnglePD(int targetAngle, int leftEncoder, int rightEncoder) {
+  static int prevAngleError = 0;
+  int angleError = targetAngle - (leftEncoder - rightEncoder);
+  float angleDeriv = angleError - prevAngleError;
+
+  // PD output for angle
+  float angleOutput = (Kp_angle * angleError) + (Kd_angle * angleDeriv);
+  prevAngleError = angleError;
+
+  return angleOutput;
 }
 
-void moveForward(int targetA, int targetB) {
+void moveForward(int targetDistance) {
   resetEncoders();
-  while (abs(encoderCountA - targetA) > 100 || abs(encoderCountB - targetB) > 100) {
-    moveMotorToTargetPosition(0, targetA);
-    moveMotorToTargetPosition(1, targetB);
+  while (true) {
+    int avgEncoderCount = (encoderCountA + encoderCountB) / 2;
+    int currentAngle = encoderCountA - encoderCountB; // Angle difference from encoders
+
+    // Calculate PD outputs for distance and angle
+    float distanceOutput = calculateDistancePD(targetDistance, avgEncoderCount);
+    float angleOutput = calculateAnglePD(0, encoderCountA, encoderCountB);
+
+    // Combine distance and angle outputs to control motors
+    int leftMotorSpeed = constrain(distanceOutput + angleOutput, motorMinSpeed, motorMaxSpeed);
+    int rightMotorSpeed = constrain(distanceOutput - angleOutput, motorMinSpeed, motorMaxSpeed);
+
+    // Drive motors
+    leftFwd(leftMotorSpeed);
+    rightFwd(rightMotorSpeed);
+
+    // Check if target distance is reached
+    if (abs(avgEncoderCount - targetDistance) < 150) break;
+    if (isWallPresent(s2, 3)) break;
+
+    // Debugging information
     Serial.print("Encoder A ");
     Serial.print(encoderCountA);
     Serial.print(" Encoder B: ");
     Serial.println(encoderCountB);
   }
-  // Stop both motors once the target is reached
   leftFwd(0);
   rightFwd(0);
 }
 
 void turnLeft() {
   resetEncoders();
-  while (abs(encoderCountA + leftTurnTarget) > 100 || abs(encoderCountB - leftTurnTarget) > 100) {
-    moveMotorToTargetPosition(0, -leftTurnTarget);
-    moveMotorToTargetPosition(1, leftTurnTarget);
-    Serial.print("Encoder A ");
+  int targetAngle = -leftTurnTarget;  // Target angle for a 90-degree left turn
+  
+  while (true) {
+    int currentAngle = encoderCountA - encoderCountB;
+    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB);
+    
+    // Adjust motor speeds: left motor slightly slower to compensate for offset
+    int leftMotorSpeed = constrain(fabs(angleOutput) * diffFactor, motorMinSpeed, motorMaxSpeed); 
+    int rightMotorSpeed = constrain(fabs(angleOutput), motorMinSpeed, motorMaxSpeed);
+
+    leftRev(leftMotorSpeed);    // Left motor reverse
+    rightFwd(rightMotorSpeed);  // Right motor forward
+    
+    if (abs(currentAngle - targetAngle) < 150 || (currentAngle < (targetAngle + 150))) break;
+
+    Serial.print("Encoder A: ");
     Serial.print(encoderCountA);
     Serial.print(" Encoder B: ");
-    Serial.println(encoderCountB);
+    Serial.print(encoderCountB);
+    Serial.print(" AngleOutput: ");
+    Serial.println(leftMotorSpeed);
   }
   leftFwd(0);
   rightFwd(0);
@@ -391,10 +380,26 @@ void turnLeft() {
 
 void turnRight() {
   resetEncoders();
-  while (abs(encoderCountA - rightTurnTarget) > 100 || abs(encoderCountB + rightTurnTarget) > 100) {
-    moveMotorToTargetPosition(0, rightTurnTarget);
-    moveMotorToTargetPosition(1, -rightTurnTarget);
-    Serial.print("Encoder A ");
+  int targetAngle = rightTurnTarget;  // Target angle for a 90-degree right turn
+  
+  while (true) {
+    int currentAngle = encoderCountA - encoderCountB;  // Difference between encoders
+
+    // Calculate PD output for angle control
+    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB);
+    
+    // Adjust motor speeds: right motor slightly slower to compensate for offset
+    int leftMotorSpeed = constrain(fabs(angleOutput), motorMinSpeed, motorMaxSpeed);
+    int rightMotorSpeed = constrain(fabs(angleOutput) * diffFactor, motorMinSpeed, motorMaxSpeed); 
+
+    leftFwd(leftMotorSpeed);    // Left motor forward
+    rightRev(rightMotorSpeed);  // Right motor reverse
+
+    // Stop turning if target angle is reached within tolerance
+    if (abs(currentAngle - targetAngle) < 150) break;
+
+    // Debugging output
+    Serial.print("Encoder A: ");
     Serial.print(encoderCountA);
     Serial.print(" Encoder B: ");
     Serial.println(encoderCountB);
@@ -405,10 +410,24 @@ void turnRight() {
 
 void one80() {
   resetEncoders();
-  while (abs(encoderCountA - one80TurnTarget) > 100 || abs(encoderCountB + one80TurnTarget) > 100) {
-    moveMotorToTargetPosition(0, one80TurnTarget);
-    moveMotorToTargetPosition(1, -one80TurnTarget);
-    Serial.print("Encoder A ");
+  int targetAngle = one80TurnTarget;  // Target angle for a 180-degree turn
+  
+  while (true) {
+    int currentAngle = encoderCountA - encoderCountB;  // Difference between encoders
+
+    // Calculate PD output for angle control
+    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB);
+
+    // Set both motors to opposite directions to turn in place
+    int motorSpeed = constrain(fabs(angleOutput), motorMinSpeed, motorMaxSpeed);
+    leftFwd(motorSpeed);    // Left motor forward
+    rightRev(motorSpeed);   // Right motor in reverse
+
+    // Stop turning if target angle is reached within tolerance
+    if (abs(currentAngle - targetAngle) < 150) break;
+
+    // Debugging output
+    Serial.print("Encoder A: ");
     Serial.print(encoderCountA);
     Serial.print(" Encoder B: ");
     Serial.println(encoderCountB);
