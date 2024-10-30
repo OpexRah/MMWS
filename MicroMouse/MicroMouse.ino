@@ -14,7 +14,7 @@
 #define echoPin3 12
 
 // other macros
-#define thresholdDistance 7
+#define thresholdDistance 8
 #define MAX 36
 #define INF 32767
 
@@ -90,7 +90,8 @@ int IN2 = 7;  // IN4 for Motor 2
 
 // Motor control limits
 int motorMinSpeed = 0;   // Minimum speed
-int motorMaxSpeed = 130; // Maximum speed
+int motorMaxSpeed = 255; // Maximum speed
+int baseSpeed = 120;     // Base speed for both motors
 float diffFactor = 1;
 
 // PID Constants and Variables for moving to target encoder value
@@ -98,10 +99,12 @@ float kp = 1;
 float kd = 2;
 float ki = 0;
 // PD constants
-float Kp_distance = 0.3;  // Proportional constant for distance
+float Kp_distance = 0.01;  // Proportional constant for distance
 float Kd_distance = 0.1;  // Derivative constant for distance
-float Kp_angle = 0.25;     // Proportional constant for angle
-float Kd_angle = 0.1;     // Derivative constant for angle
+float Kp_angle = 2.5;     // Proportional constant for angle
+float Kd_angle = 0.3;     // Derivative constant for angle
+float kp_angle_turn = 0.2;
+float kd_angle_turn = 0.01;
 
 float prevErrorA = 0;
 float intErrorA = 0;
@@ -109,8 +112,8 @@ float prevErrorB = 0;
 float intErrorB = 0;
 
 // Bot movement variables
-int leftTurnTarget = 2000;
-int rightTurnTarget = 1950;
+int leftTurnTarget = 1750;
+int rightTurnTarget = 1660;
 int one80TurnTarget = 4000;
 int cellDistance = 1850;
 
@@ -172,7 +175,7 @@ void setup() {
 
   Serial.begin(115200);
   Serial.println("Starting maze solver in 5 seconds");
-  delay(5000);
+  delay(2000);
 }
 
 void loop() {
@@ -209,7 +212,7 @@ void loop() {
   delay(2000);
   Serial.println("Moving bot to next cell");
   delay(1000);
-  moveForward(cellDistance);
+  moveForward(((encoderCountA + encoderCountB) / 2) + cellDistance);
   bot_x = best_x;
   bot_y = best_y;
   Serial.print("Bot position: ");
@@ -220,9 +223,7 @@ void loop() {
 
   delay(2000);
   // turnLeft();
-  // delay(3000);
-  // turnRight();
-  // delay(3000);
+  // delay(2000);
 }
 
 // Interrupt handler for Encoder A (pins A and B)
@@ -306,7 +307,7 @@ float calculateDistancePD(int targetDistance, int currentDistance) {
   return distanceOutput;
 }
 
-float calculateAnglePD(int targetAngle, int leftEncoder, int rightEncoder) {
+float calculateAnglePD(int targetAngle, int leftEncoder, int rightEncoder, float Kp_angle, float Kd_angle) {
   static int prevAngleError = 0;
   int angleError = targetAngle - (leftEncoder - rightEncoder);
   float angleDeriv = angleError - prevAngleError;
@@ -319,18 +320,18 @@ float calculateAnglePD(int targetAngle, int leftEncoder, int rightEncoder) {
 }
 
 void moveForward(int targetDistance) {
-  resetEncoders();
+  //resetEncoders();
   while (true) {
     int avgEncoderCount = (encoderCountA + encoderCountB) / 2;
     int currentAngle = encoderCountA - encoderCountB; // Angle difference from encoders
 
     // Calculate PD outputs for distance and angle
     float distanceOutput = calculateDistancePD(targetDistance, avgEncoderCount);
-    float angleOutput = calculateAnglePD(0, encoderCountA, encoderCountB);
+    float angleOutput = calculateAnglePD(0, encoderCountA, encoderCountB, Kp_angle, Kd_angle);
 
     // Combine distance and angle outputs to control motors
-    int leftMotorSpeed = constrain(distanceOutput + angleOutput, motorMinSpeed, motorMaxSpeed);
-    int rightMotorSpeed = constrain(distanceOutput - angleOutput, motorMinSpeed, motorMaxSpeed);
+    int leftMotorSpeed = constrain(baseSpeed + distanceOutput + angleOutput, motorMinSpeed, motorMaxSpeed);
+    int rightMotorSpeed = constrain(baseSpeed + distanceOutput - angleOutput, motorMinSpeed, motorMaxSpeed);
 
     // Drive motors
     leftFwd(leftMotorSpeed);
@@ -338,9 +339,10 @@ void moveForward(int targetDistance) {
 
     // Check if target distance is reached
     if (abs(avgEncoderCount - targetDistance) < 150) break;
-    if (isWallPresent(s2, 3)) break;
 
     // Debugging information
+    Serial.print("Angle: ");
+    Serial.print(angleOutput);
     Serial.print("Encoder A ");
     Serial.print(encoderCountA);
     Serial.print(" Encoder B: ");
@@ -348,19 +350,47 @@ void moveForward(int targetDistance) {
   }
   leftFwd(0);
   rightFwd(0);
+  //resetEncoders();
 }
+
+void moveBackward(int targetDistance) {
+  // Reset encoders to start counting from zero
+  resetEncoders();
+
+  while (true) {
+    int avgEncoderCount = (encoderCountA + encoderCountB) / 2;
+      // Drive motors in reverse
+    leftRev(130);
+    rightRev(130);
+
+    // Check if the target distance is reached (abs(avgEncoderCount - targetDistance) < tolerance)
+    if (abs(avgEncoderCount - targetDistance) < 150) break;
+
+    // Debugging information
+    Serial.print(" Encoder A: ");
+    Serial.print(encoderCountA);
+    Serial.print(" Encoder B: ");
+    Serial.println(encoderCountB);
+  }
+  // Stop both motors after moving the target distance
+  leftRev(0);
+  rightRev(0);
+  resetEncoders();
+}
+
 
 void turnLeft() {
   resetEncoders();
+  moveForward(((encoderCountA + encoderCountB) / 2) + 500);
   int targetAngle = -leftTurnTarget;  // Target angle for a 90-degree left turn
   
   while (true) {
     int currentAngle = encoderCountA - encoderCountB;
-    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB);
+    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB, kp_angle_turn, kd_angle_turn);
     
     // Adjust motor speeds: left motor slightly slower to compensate for offset
-    int leftMotorSpeed = constrain(fabs(angleOutput) * diffFactor, motorMinSpeed, motorMaxSpeed); 
-    int rightMotorSpeed = constrain(fabs(angleOutput), motorMinSpeed, motorMaxSpeed);
+    int leftMotorSpeed = constrain(fabs(angleOutput) * diffFactor, motorMinSpeed, 130); 
+    int rightMotorSpeed = constrain(fabs(angleOutput), motorMinSpeed, 130);
 
     leftRev(leftMotorSpeed);    // Left motor reverse
     rightFwd(rightMotorSpeed);  // Right motor forward
@@ -376,21 +406,24 @@ void turnLeft() {
   }
   leftFwd(0);
   rightFwd(0);
+  resetEncoders();
+  moveBackward(((encoderCountA + encoderCountB) / 2) - 450);
 }
 
 void turnRight() {
   resetEncoders();
+  moveForward(((encoderCountA + encoderCountB) / 2) + 500);
   int targetAngle = rightTurnTarget;  // Target angle for a 90-degree right turn
   
   while (true) {
     int currentAngle = encoderCountA - encoderCountB;  // Difference between encoders
 
     // Calculate PD output for angle control
-    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB);
+    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB, kp_angle_turn, kd_angle_turn);
     
     // Adjust motor speeds: right motor slightly slower to compensate for offset
-    int leftMotorSpeed = constrain(fabs(angleOutput), motorMinSpeed, motorMaxSpeed);
-    int rightMotorSpeed = constrain(fabs(angleOutput) * diffFactor, motorMinSpeed, motorMaxSpeed); 
+    int leftMotorSpeed = constrain(fabs(angleOutput), motorMinSpeed, 130);
+    int rightMotorSpeed = constrain(fabs(angleOutput) * diffFactor, motorMinSpeed, 130); 
 
     leftFwd(leftMotorSpeed);    // Left motor forward
     rightRev(rightMotorSpeed);  // Right motor reverse
@@ -406,17 +439,19 @@ void turnRight() {
   }
   leftFwd(0);
   rightFwd(0);
+  resetEncoders();
+  moveBackward(((encoderCountA + encoderCountB) / 2) - 450);
 }
 
 void one80() {
-  resetEncoders();
+  //resetEncoders();
   int targetAngle = one80TurnTarget;  // Target angle for a 180-degree turn
   
   while (true) {
     int currentAngle = encoderCountA - encoderCountB;  // Difference between encoders
 
     // Calculate PD output for angle control
-    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB);
+    float angleOutput = calculateAnglePD(targetAngle, encoderCountA, encoderCountB, kp_angle_turn, kd_angle_turn);
 
     // Set both motors to opposite directions to turn in place
     int motorSpeed = constrain(fabs(angleOutput), motorMinSpeed, motorMaxSpeed);
@@ -434,6 +469,7 @@ void one80() {
   }
   leftFwd(0);
   rightFwd(0);
+  resetEncoders();
 }
 
 void orient_bot(int target_x, int target_y){
