@@ -321,6 +321,10 @@ float calculateAnglePD(int targetAngle, int leftEncoder, int rightEncoder, float
 
 void moveForward(int targetDistance) {
   //resetEncoders();
+  // kickstart the motor
+  leftFwd(150);
+  rightFwd(150);
+  delay(50);
   while (true) {
     int avgEncoderCount = (encoderCountA + encoderCountB) / 2;
     int currentAngle = encoderCountA - encoderCountB; // Angle difference from encoders
