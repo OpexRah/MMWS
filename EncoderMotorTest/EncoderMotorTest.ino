@@ -3,8 +3,7 @@
 #define encoderPinA 2
 #define encoderPinB 3 
 #define encoderPinC 4
-#define encoderPinD 5 
-#define ledPin 13      
+#define encoderPinD 5    
 
 volatile long encoderCountA = 0;
 volatile long encoderCountB = 0;
@@ -15,7 +14,6 @@ void setup() {
   pinMode(encoderPinB, INPUT_PULLUP);
   pinMode(encoderPinC, INPUT_PULLUP);
   pinMode(encoderPinD, INPUT_PULLUP);
-  pinMode(ledPin, OUTPUT);  // LED to visually confirm interrupts
 
   // Use PinChangeInterrupt library to attach interrupts for all encoder pins
   attachPCINT(digitalPinToPCINT(encoderPinA), handleEncoderInterruptA, CHANGE);
@@ -54,9 +52,6 @@ void handleEncoderInterruptA() {
   }
   lastA = A;
   lastB = B;
-
-  // Turn off LED after ISR is processed
-  digitalWrite(ledPin, LOW);
 }
 
 // Interrupt handler for Encoder B (pins C and D)
@@ -77,7 +72,4 @@ void handleEncoderInterruptB() {
   }
   lastC = C;
   lastD = D;
-
-  // Turn off LED after ISR is processed
-  digitalWrite(ledPin, LOW);
 }
