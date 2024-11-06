@@ -4,6 +4,7 @@
 #define encoderPinB 3 
 #define encoderPinC 4
 #define encoderPinD 5    
+#define ledPin 13
 
 volatile long encoderCountA = 0;
 volatile long encoderCountB = 0;
