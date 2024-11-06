@@ -21,7 +21,7 @@ void loop() {
   digitalWrite(in2Pin, LOW);  // Control pin 2 LOW
 
   // Set the motor speed using PWM (range: 0 - 255)
-  int speed = 150;            // PWM value to set motor speed
+  int speed = 255;            // PWM value to set motor speed
   analogWrite(enPin, speed);  // Write PWM value to enable pin
 
   // Keep the motor running for 5 seconds
