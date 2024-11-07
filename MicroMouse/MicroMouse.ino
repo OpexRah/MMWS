@@ -79,13 +79,13 @@ volatile bool lastA, lastB, lastC, lastD;
 
 // Define L293D motor driver pins
 // Motor 2
-int ENB = A2;  // Enable pin for Motor 1
+int ENB = 9;  // Enable pin for Motor 1
 int IN3 = 8;  // IN1 for Motor 1
-int IN4 = 9;  // IN2 for Motor 1
+int IN4 = 13;  // IN2 for Motor 1
 
 // Motor 1
-int ENA = A1; // Enable pin for Motor 2
-int IN1 = 6;  // IN3 for Motor 2
+int ENA = 6; // Enable pin for Motor 2
+int IN1 = A2;  // IN3 for Motor 2
 int IN2 = 7;  // IN4 for Motor 2
 
 // Motor control limits
