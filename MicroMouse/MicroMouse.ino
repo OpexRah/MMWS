@@ -94,10 +94,6 @@ int motorMaxSpeed = 255; // Maximum speed
 int baseSpeed = 120;     // Base speed for both motors
 float diffFactor = 1;
 
-// PID Constants and Variables for moving to target encoder value
-float kp = 1;
-float kd = 2;
-float ki = 0;
 // PD constants
 float Kp_distance = 0.01;  // Proportional constant for distance
 float Kd_distance = 0.1;  // Derivative constant for distance
@@ -122,28 +118,28 @@ int cellDistance = 1850;
 void handleEncoderInterruptA();
 void handleEncoderInterruptB();
 void resetEncoders();
-// motor control functions
+// motor spin functions
 void leftFwd(int speed);
 void leftRev(int speed);
 void rightFwd(int speed);
 void rightRev(int speed);
-// pid functions
-float calculatePID(int motor, int currentEncoder, int targetEncoder);
+// PD control outputs
+float calculateDistancePD(int targetDistance, int currentDistance);
+float calculateAnglePD(int targetAngle, int leftEncoder, int rightEncoder, float Kp_angle, float Kd_angle);
 // bot movement functions
-int moveMotorToTargetPosition(int motor, int target);
-void moveForward(int targetA, int targetB);
+void moveForward(int targetDistance);
+void moveBackward(int targetDistance);
 void turnLeft();
 void turnRight();
 void one80();
-// ultrasonic functions
+void orient_bot(int target_x, int target_y);
+// Floodfill and maze solving functions
 bool isWallPresent(Ultrasonic sensor, float threshold);
-// floodfill and maze solve functions
 bool binary_search(int* arr, int size, int target);
 void update_walls(bool L, bool R, bool F);
-bool is_accessible(int bot_x,int bot_y,int new_x, int new_y);
+bool is_accessible(int bot_x, int bot_y, int new_x, int new_y);
 void floodfill();
 void next_move(int* best_x, int* best_y);
-void orient_bot(int target_x, int target_y);
 void print_distances();
 void print_maze();
 
